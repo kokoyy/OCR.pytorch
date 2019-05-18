@@ -1,2 +1,1 @@
-# OCR.pytorch
-OCR on dnn
+chinese, english, digit OCR using dnn

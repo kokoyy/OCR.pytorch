@@ -1,18 +1,20 @@
-import torch
-import torch.utils.data
-import torch.nn as nn
 import cv2
 import numpy as np
+import torch
+import torch.backends.cudnn
+import torch.nn as nn
+import torch.utils.data
 import torchvision.transforms as transforms
 from PIL import Image, ImageDraw, ImageFont
-from utils.pytorch_trainer import Trainer
-from model.densenetctc import DenseNetCTC
-from model.denselstmctc import DenseBLSTMCTC
+
+from dataset.YCG09dataset import YCG09DataSet
 from model.ctc import CTCLoss
-from dataset.cggdataset import VGGDataSet
-from utils.label import MultiLabelTransformer
-from utils.accuracy_fn import multi_label_accuracy_fn
+from model.denselstmctc import DenseBLSTMCTC
+from model.densenetctc import DenseNetCTC
 from preprocess.textline import cv2_detect_text_region
+from utils.accuracy_fn import multi_label_accuracy_fn
+from utils.label import MultiLabelTransformer
+from utils.pytorch_trainer import Trainer
 
 
 def train(model, data_path, label_transformer, model_path=None, initial_lr=0.01, epochs=10, batch_size=32,
@@ -22,7 +24,7 @@ def train(model, data_path, label_transformer, model_path=None, initial_lr=0.01,
                                      std=[0.5, 0.5, 0.5])
 
     train_loader = torch.utils.data.DataLoader(
-        VGGDataSet(data_path, True, transforms.Compose([
+        YCG09DataSet(data_path, True, transforms.Compose([
             transforms.ToTensor(),
             normalize,
         ]), start_index=start_index),
@@ -31,7 +33,7 @@ def train(model, data_path, label_transformer, model_path=None, initial_lr=0.01,
     )
 
     val_loader = torch.utils.data.DataLoader(
-        VGGDataSet(data_path, False, transforms.Compose([
+        YCG09DataSet(data_path, False, transforms.Compose([
             transforms.ToTensor(),
             normalize,
         ])),
@@ -63,7 +65,7 @@ def test_data():
     normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5],
                                      std=[0.5, 0.5, 0.5])
     train_loader = torch.utils.data.DataLoader(
-        VGGDataSet(train_data_path, False, transforms.Compose([
+        YCG09DataSet(train_data_path, False, transforms.Compose([
             transforms.ToTensor(),
             normalize,
         ])),
@@ -83,7 +85,7 @@ def test_data():
 
 def evaluate(model_path, classes, image_path):
     label_transformer = MultiLabelTransformer(label_file='label.txt', encoding='GB18030')
-    model = DenseNetCTC(num_classes=classes, conv0=nn.Conv2d(3, 64, 3, 1, 1))
+    model = DenseBLSTMCTC(num_classes=classes, conv0=nn.Conv2d(3, 64, 3, 1, 1))
     checkpoint = torch.load(model_path)
     model.load_state_dict(checkpoint['state_dict'])
 
@@ -120,21 +122,20 @@ def evaluate(model_path, classes, image_path):
 
 def main():
     classes = 5990
-    batch_size = 16
+    batch_size = 32
+    start_index = 33140
     data_path = "/mnt/data/BaiduNetdiskDownload"
-    # model_path = 'checkpoints/checkpoint-1-val_prec_0.989-loss_0.015.pth.tar'
+    model_path = 'checkpoints/checkpoint-1-val_prec_0.909-loss_0.117.pth.tar'
     # model = DenseNetCTC(num_classes=classes, conv0=nn.Conv2d(3, 64, 3, 1, 1))
     model = DenseBLSTMCTC(num_classes=classes, conv0=nn.Conv2d(3, 64, 3, 1, 1))
     label_transformer = MultiLabelTransformer(label_file='label.txt', encoding='GB18030')
-    train(model, data_path, label_transformer, batch_size=batch_size, gpu_id=0)
-
-    # test_data()
-
-    # new_image = evaluate('checkpoints/checkpoint-1-val_prec_0.989-loss_0.015.pth.tar',
-    #                      5990, '/home/yuanyi/Pictures/tijain.jpg')
-    # cv2.imwrite('new_image.png', new_image)
+    train(model, data_path, label_transformer, batch_size=batch_size, load_worker=16, initial_lr=1e-3,
+          gpu_id=0, lr_decay_rate=1, model_path=model_path, start_index=start_index)
 
 
 if __name__ == '__main__':
     main()
-
+    # test_data()
+    # new_image = evaluate('checkpoints/checkpoint-1-val_prec_0.926-loss_0.100.pth.tar',
+    #                     5990, '/home/yuanyi/Pictures/tijian.png')
+    # cv2.imwrite('new_image.png', new_image)

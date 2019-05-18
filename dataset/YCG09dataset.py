@@ -1,12 +1,13 @@
-import torch.utils.data as data
-import torch
 import os
+
 import cv2
+import torch
+import torch.utils.data as data
 
 
-class VGGDataSet(data.Dataset):
+class YCG09DataSet(data.Dataset):
     def __init__(self, file_path, train_data=True, transform=None, label_transform=None, start_index=0):
-        super(VGGDataSet, self).__init__()
+        super(YCG09DataSet, self).__init__()
         self.img_file_path = os.path.join(file_path, 'images')
         self.label_file = os.path.join(file_path, 'train.txt' if train_data else 'test.txt')
         self.transform = transform
@@ -44,6 +45,6 @@ class VGGDataSet(data.Dataset):
 
 
 if __name__ == '__main__':
-    dataset = VGGDataSet('/mnt/data/BaiduNetdiskDownload', False)
+    dataset = YCG09DataSet('/mnt/data/BaiduNetdiskDownload', False)
     for data in dataset:
         print(data)
