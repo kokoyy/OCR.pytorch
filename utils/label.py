@@ -1,14 +1,13 @@
-import torch
-
-
 class DoNothingLabelTransformer(object):
     def __init__(self):
         pass
 
-    def parse_target(self, targets):
+    @staticmethod
+    def parse_target(targets):
         return targets
 
-    def parse_prediction(self, pred, to_string=True, top_k=1):
+    @staticmethod
+    def parse_prediction(pred, to_string=True, top_k=1):
         return pred
 
 
@@ -64,12 +63,3 @@ class MultiLabelTransformer(object):
             convert_pred.append(row_no_blank)
         return convert_pred
 
-
-if __name__ == '__main__':
-    transformer = MultiLabelTransformer(label_file='../label.txt', encoding='GB18030')
-    # last line of the test.txt
-    line1 = '279 89 54 1591 517 14 23 24 98 96'.split(' ')
-    line1 = [int(i) for i in line1]
-    print(transformer.parse_target([line1]))
-    preds = torch.randn(3, 4, 5)
-    print(transformer.parse_prediction(preds, top_k=3))

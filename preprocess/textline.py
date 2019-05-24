@@ -48,5 +48,15 @@ if __name__ == '__main__':
     img = cv2.imread('/home/yuanyi/Pictures/tijian.png', cv2.IMREAD_COLOR)
     region = cv2_detect_text_region(img)
     for box in region:
-        cv2.drawContours(img, [box], 0, (0, 255, 0), 2)
+        print(box)
+        scale = 0.1
+        height = box[3][1] - box[2][1]
+        width = box[2][0] - box[1][0]
+        point1 = [box[0][0], int(box[0][1] - height * scale)]
+        point2 = [box[1][0], box[1][1]]
+        point3 = [int(box[2][0] - width * scale), box[2][1]]
+        point4 = [int(box[3][0] - width * scale), int(box[3][1] - height * scale)]
+        box = np.array([point1, point2, point3, point4])
+        print(box)
+        cv2.drawContours(img, [box], 0, (0, 255, 0), 1)
     cv2.imwrite("contours.png", img)

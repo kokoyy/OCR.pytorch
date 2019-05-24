@@ -1,17 +1,20 @@
-import os
-import time
 import math
-import torch
+import os
 import shutil
+import time
 from threading import Timer
-from utils.label import DoNothingLabelTransformer
-from utils.accuracy_fn import default_accuracy_fn
 
+import torch
+import torch.nn.utils
 import torch.utils.data
+
+from utils.accuracy_fn import default_accuracy_fn
+from utils.label import DoNothingLabelTransformer
 
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
+
     def __init__(self):
         self.val = 0.
         self.avg = 0.
@@ -37,7 +40,7 @@ class Trainer(object):
                  train_loader=None, validation_loader=None, test_loader=None,
                  lr_decay_rate=5, model_store_path="checkpoints", gpu_id=-1,
                  label_transformer=DoNothingLabelTransformer(),
-                 half_float=False, accuracy_fn=default_accuracy_fn, print_interval=1, top_k=(1, )):
+                 half_float=False, accuracy_fn=default_accuracy_fn, print_interval=1, top_k=(1,)):
         if gpu_id < 0:
             self.device = torch.device("cpu")
         else:
@@ -84,23 +87,25 @@ class Trainer(object):
                     trainer.stopped = True
                 else:
                     Timer(10.0, check_stop, args=[trainer], kwargs=None).start()
+
         Timer(10.0, check_stop, args=[self], kwargs=None).start()
 
     def _print_format(self):
         print_str = 'Epoch[{0}]: [{1}/{2}]\t' \
-                 'ETA {3:.2f}\t' \
-                 'Time {batch_time.val:.3f}({batch_time.avg:.3f})\t' \
-                 'Data {data_time.val:.3f}({data_time.avg:.3f})\t' \
-                 'Loss {loss.val:.4f}({loss.avg:.4f})\t'
+                    'ETA {3:.2f}\t' \
+                    'Time {batch_time.val:.3f}({batch_time.avg:.3f})\t' \
+                    'Data {data_time.val:.3f}({data_time.avg:.3f})\t' \
+                    'Loss {loss.val:.4f}({loss.avg:.4f})\t'
         for k in self.top_k:
-            print_str = print_str + 'Prec@'+str(k)+' {metric[top'+str(k)+'].val:.2%}({metric[top'+str(k)+'].avg:.2%})\t'
+            print_str = print_str + 'Prec@' + str(k) + ' {metric[top' + str(k) + '].val:.2%}({metric[top' + str(
+                k) + '].avg:.2%})\t'
         return print_str
 
     def _adjust_learning_rate(self, optimizer, epoch):
         lr = self.lr * (0.1 ** (epoch // self.lr_decay))
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
-        print("*"*10, '==> lr =', lr, "*"*10)
+        print("*" * 10, '==> lr =', lr, "*" * 10)
 
     def _save_checkpoint(self, epoch, is_best, file_prefix='checkpoint'):
         state = {
@@ -112,7 +117,7 @@ class Trainer(object):
             'train_loss': self.metric['train_loss'],
             'validation_loss': self.metric['validation_loss'],
         }
-        filename = '{filePrefix}-{epoch}-val_prec_{precTop1:.3f}-loss_{loss:.3f}.pth.tar'\
+        filename = '{filePrefix}-{epoch}-val_prec_{precTop1:.3f}-loss_{loss:.3f}.pth.tar' \
             .format(filePrefix=file_prefix, epoch=epoch,
                     precTop1=state['validation_prec@top1'],
                     loss=state['validation_loss'])
@@ -122,7 +127,7 @@ class Trainer(object):
             shutil.copyfile(file_path, os.path.join(self.model_path, 'model_best.pth.tar'))
         print(">> model saved >>", file_path)
 
-    def run(self, epochs=5, resume=None):
+    def run(self, epochs=5, resume=None, valid=True):
         epoch = 0
         if resume is not None and os.path.exists(resume):
             checkpoint = torch.load(resume)
@@ -134,10 +139,11 @@ class Trainer(object):
         for idx in range(epoch, epochs):
             print('*' * 10, "epoch[", idx, "] training start", "*" * 10)
             self._do_run(True, idx)
-            print('*' * 10, "epoch[", idx, "] training finished", "*"*10)
-            print('*' * 10, "epoch[", idx, "] validation start", "*" * 10)
-            self._do_run(False, idx)
-            print('*' * 10, "epoch[", idx, "] validation finished", "*" * 10)
+            print('*' * 10, "epoch[", idx, "] training finished", "*" * 10)
+            if valid:
+                print('*' * 10, "epoch[", idx, "] validation start", "*" * 10)
+                self._do_run(False, idx)
+                print('*' * 10, "epoch[", idx, "] validation finished", "*" * 10)
             is_best = self.metric['validation_prec@top1'] > best_prec
             if is_best:
                 best_prec = self.metric['validation_prec@top1']
@@ -154,7 +160,7 @@ class Trainer(object):
 
         prec_topk = dict()
         for k in self.top_k:
-            prec_topk['top'+str(k)] = AverageMeter()
+            prec_topk['top' + str(k)] = AverageMeter()
 
         # switch mode
         if train_model:
@@ -173,7 +179,7 @@ class Trainer(object):
 
         for k in self.top_k:
             if train_model:
-                self.metric['train_prec@top' + str(k)] = prec_topk['top'+str(k)].avg
+                self.metric['train_prec@top' + str(k)] = prec_topk['top' + str(k)].avg
             else:
                 self.metric['validation_prec@top' + str(k)] = prec_topk['top' + str(k)].avg
         if train_model:
@@ -183,9 +189,9 @@ class Trainer(object):
 
     def _compute(self, batch_time, data_time, end, epoch, loader, losses, prec_topk, train_model):
         for i, (samples, target) in enumerate(loader):
+            torch.cuda.empty_cache()
             # measure data loading time
             data_time.update(time.time() - end)
-
             samples = samples.to(self.device) if not self.half_float else samples.to(self.device).half()
             target = target.to(self.device)
 
@@ -193,6 +199,7 @@ class Trainer(object):
             output = self.model(samples)
             loss = self.criterion(output, target)
             if math.isinf(loss.item()):
+                print('inf loss', target)
                 continue
             losses.update(loss.item(), samples.size(0))
 
@@ -206,6 +213,7 @@ class Trainer(object):
             if train_model:
                 self.optimizer.zero_grad()
                 loss.backward()
+                # torch.nn.utils.clip_grad_norm_(self.model.parameters(), 100)
                 self.optimizer.step()
 
             # measure elapsed time

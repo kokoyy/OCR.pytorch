@@ -8,9 +8,9 @@ import torchvision.transforms as transforms
 from PIL import Image, ImageDraw, ImageFont
 
 from dataset.YCG09dataset import YCG09DataSet
+from model.crnn.denselstmctc import DenseBLSTMCTC
+from model.crnn.densenetctc import DenseNetCTC
 from model.ctc import CTCLoss
-from model.denselstmctc import DenseBLSTMCTC
-from model.densenetctc import DenseNetCTC
 from preprocess.textline import cv2_detect_text_region
 from utils.accuracy_fn import multi_label_accuracy_fn
 from utils.label import MultiLabelTransformer
@@ -18,7 +18,8 @@ from utils.pytorch_trainer import Trainer
 
 
 def train(model, data_path, label_transformer, model_path=None, initial_lr=0.01, epochs=10, batch_size=32,
-          load_worker=4, start_index=0, print_interval=10, gpu_id=-1, lr_decay_rate=2):
+          load_worker=4, start_index=0, print_interval=10, gpu_id=-1, lr_decay_rate=2,
+          train_length=None, valid_length=None):
     start_index = 0 if start_index <= 0 else (start_index * batch_size) + 1
     normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5],
                                      std=[0.5, 0.5, 0.5])
@@ -27,7 +28,7 @@ def train(model, data_path, label_transformer, model_path=None, initial_lr=0.01,
         YCG09DataSet(data_path, True, transforms.Compose([
             transforms.ToTensor(),
             normalize,
-        ]), start_index=start_index),
+        ]), data_length=train_length, start_index=start_index, split_char=' '),
         batch_size=batch_size, shuffle=False,
         num_workers=load_worker, pin_memory=True
     )
@@ -36,31 +37,29 @@ def train(model, data_path, label_transformer, model_path=None, initial_lr=0.01,
         YCG09DataSet(data_path, False, transforms.Compose([
             transforms.ToTensor(),
             normalize,
-        ])),
+        ]), data_length=valid_length),
         batch_size=batch_size, shuffle=False,
         num_workers=load_worker, pin_memory=True
     )
 
-    criterion = CTCLoss()
+    criterion = CTCLoss(zero_infinity=True)
     optimizer = torch.optim.SGD(model.parameters(), initial_lr,
                                 momentum=0.9,
                                 weight_decay=1e-4)
+    # optimizer = torch.optim.Adam(model.parameters(), initial_lr, weight_decay=1e-2)
     trainer = Trainer(model=model, initial_lr=initial_lr, train_loader=train_loader, validation_loader=val_loader,
                       top_k=(1,), print_interval=print_interval, loss_fn=criterion, optimizer=optimizer,
                       half_float=False, label_transformer=label_transformer,
+                      model_store_path='checkpoints/' + model.__class__.__name__,
                       accuracy_fn=multi_label_accuracy_fn, gpu_id=gpu_id, lr_decay_rate=lr_decay_rate)
-    trainer.run(epochs=epochs, resume=model_path)
+    trainer.run(epochs=epochs, resume=model_path, valid=True)
 
 
-def test_data():
-    classes = 5990
-    batch_size = 32
+def test_data(model, weight_path, label_transformer, batch_size=16):
     load_worker = 8
-    label_transformer = MultiLabelTransformer(label_file='label.txt', encoding='GB18030')
-    model = DenseNetCTC(num_classes=classes, conv0=nn.Conv2d(3, 64, 3, 1, 1))
-    checkpoint = torch.load('checkpoints/checkpoint-1-val_prec_0.989-loss_0.015.pth.tar')
+    checkpoint = torch.load(weight_path)
     model.load_state_dict(checkpoint['state_dict'])
-
+    model.cuda()
     train_data_path = "/mnt/data/BaiduNetdiskDownload"
     normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5],
                                      std=[0.5, 0.5, 0.5])
@@ -73,19 +72,28 @@ def test_data():
         num_workers=load_worker, pin_memory=True
     )
 
+    error_sample = []
     for sample, target in train_loader:
+        (sample, filename) = sample
+        sample = sample.cuda()
+        target = target.cuda()
         output = model(sample)
-        target = label_transformer.parse_target(target)
+        labels = label_transformer.parse_target(target)
         for idx, row in enumerate(label_transformer.parse_prediction(output, to_string=True)):
             pred = ''.join(list(filter(lambda x: x != 0, row[0])))
-            label = ''.join(target[idx])
+            label = ''.join(labels[idx])
             if pred != label:
-                print(''.join(list(filter(lambda x: x != 0, row[0]))), '\t===>\t', ''.join(target[idx]))
+                error_sample.append((filename[idx], ' '.join([str(num.item()) for num in target[idx]])))
+                print(idx, len(train_loader))
+
+    with open('/mnt/data/error.txt', "a+") as error_file:
+        for line in error_sample:
+            error_file.write(line[0] + " " + line[1] + "\n")
 
 
 def evaluate(model_path, classes, image_path):
     label_transformer = MultiLabelTransformer(label_file='label.txt', encoding='GB18030')
-    model = DenseBLSTMCTC(num_classes=classes, conv0=nn.Conv2d(3, 64, 3, 1, 1))
+    model = DenseBLSTMCTC(num_classes=classes)
     checkpoint = torch.load(model_path)
     model.load_state_dict(checkpoint['state_dict'])
 
@@ -123,19 +131,22 @@ def evaluate(model_path, classes, image_path):
 def main():
     classes = 5990
     batch_size = 32
-    start_index = 33140
     data_path = "/mnt/data/BaiduNetdiskDownload"
-    model_path = 'checkpoints/checkpoint-1-val_prec_0.909-loss_0.117.pth.tar'
-    # model = DenseNetCTC(num_classes=classes, conv0=nn.Conv2d(3, 64, 3, 1, 1))
-    model = DenseBLSTMCTC(num_classes=classes, conv0=nn.Conv2d(3, 64, 3, 1, 1))
+    model_path = None
+    # model = CRNN(32, 3, classes, 128)
+    model = DenseNetCTC(num_classes=classes, conv0=nn.Conv2d(3, 64, 3, 1, 1))
+    # model = DenseBLSTMCTC(num_classes=classes)
     label_transformer = MultiLabelTransformer(label_file='label.txt', encoding='GB18030')
-    train(model, data_path, label_transformer, batch_size=batch_size, load_worker=16, initial_lr=1e-3,
-          gpu_id=0, lr_decay_rate=1, model_path=model_path, start_index=start_index)
+    train(model, data_path, label_transformer, batch_size=batch_size, load_worker=8,
+          gpu_id=0, lr_decay_rate=1, model_path=model_path, start_index=0, initial_lr=1e-3,
+          train_length=None, valid_length=None)
+
+    # test_data(model, model_path, label_transformer, batch_size)
+
+    # new_image = evaluate(model, 'checkpoints/ocr-lstm.pth',
+    #                     '/home/yuanyi/Pictures/tijian.png', label_transformer)
+    # cv2.imwrite('new_image.png', new_image)
 
 
 if __name__ == '__main__':
     main()
-    # test_data()
-    # new_image = evaluate('checkpoints/checkpoint-1-val_prec_0.926-loss_0.100.pth.tar',
-    #                     5990, '/home/yuanyi/Pictures/tijian.png')
-    # cv2.imwrite('new_image.png', new_image)
