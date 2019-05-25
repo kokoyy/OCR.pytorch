@@ -13,12 +13,15 @@ class CTPNDataset(data.Dataset):
         self.transform = transform
         self.label_transform = label_transform
         self.all_sample = []
-        for root, dirs, files in os.walk(os.path.join(file_path, "image")):
+        for root, dirs, files in os.walk(self.img_file_path):
             for filename in files:
                 label_file = os.path.join(self.label_file_path, filename.split('.')[0] + ".txt")
                 if not os.path.exists(label_file):
                     continue
                 self.all_sample.append(filename)
+
+    def reset_index(self, use_start_index):
+        pass
 
     def __len__(self):
         return len(self.all_sample)

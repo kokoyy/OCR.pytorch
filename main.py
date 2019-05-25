@@ -1,4 +1,5 @@
 import cv2
+import os
 import numpy as np
 import torch
 import torch.backends.cudnn
@@ -8,18 +9,52 @@ import torchvision.transforms as transforms
 from PIL import Image, ImageDraw, ImageFont
 
 from dataset.YCG09dataset import YCG09DataSet
+from dataset.ctpnDataset import CTPNDataset
 from model.crnn.denselstmctc import DenseBLSTMCTC
 from model.crnn.densenetctc import DenseNetCTC
 from model.ctc import CTCLoss
+from model.ctpn.ctpn_loss import CTPNLoss
 from preprocess.textline import cv2_detect_text_region
 from utils.accuracy_fn import multi_label_accuracy_fn
 from utils.label import MultiLabelTransformer
 from utils.pytorch_trainer import Trainer
 
 
-def train(model, data_path, label_transformer, model_path=None, initial_lr=0.01, epochs=10, batch_size=32,
-          load_worker=4, start_index=0, print_interval=10, gpu_id=-1, lr_decay_rate=2,
-          train_length=None, valid_length=None):
+def train_ctpn(data_path, model_path=None, initial_lr=0.01, epochs=10, batch_size=32,
+               load_worker=4, print_interval=10, gpu_id=-1, lr_decay_rate=2):
+    import torchvision.models as models
+    from model.ctpn.ctpn import CTPN
+
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                             std=[0.5, 0.5, 0.5])
+    ])
+    model = CTPN(models.vgg16_bn(True).named_parameters())
+    for name, parameter in model.named_parameters():
+        if name.find('cnn') >= 0:
+            parameter.requires_grad = False
+    train_loader = torch.utils.data.DataLoader(
+        CTPNDataset(data_path, transform),
+        batch_size=batch_size, shuffle=False,
+        num_workers=load_worker, pin_memory=True
+    )
+
+    criterion = CTPNLoss(cuda=gpu_id >= 0)
+    optimizer = torch.optim.SGD(model.parameters(), initial_lr,
+                                momentum=0.9,
+                                weight_decay=1e-4)
+    trainer = Trainer(model=model, initial_lr=initial_lr, train_loader=train_loader, validation_loader=None,
+                      top_k=(1,), print_interval=print_interval, loss_fn=criterion, optimizer=optimizer,
+                      half_float=False, gpu_id=gpu_id, lr_decay_rate=lr_decay_rate, accuracy_fn=None,
+                      model_store_path='/mnt/data/checkpoints/' + model.__class__.__name__)
+    trainer.run(epochs=epochs, resume=model_path, valid=False)
+
+
+def train_recognize(model, data_path, model_path=None, initial_lr=0.01, epochs=10, batch_size=32,
+                    load_worker=4, start_index=0, print_interval=10, gpu_id=-1, lr_decay_rate=2,
+                    train_length=None, valid_length=None):
+    label_transformer = MultiLabelTransformer(label_file='label.txt', encoding='GB18030')
     start_index = 0 if start_index <= 0 else (start_index * batch_size) + 1
     normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5],
                                      std=[0.5, 0.5, 0.5])
@@ -46,11 +81,10 @@ def train(model, data_path, label_transformer, model_path=None, initial_lr=0.01,
     optimizer = torch.optim.SGD(model.parameters(), initial_lr,
                                 momentum=0.9,
                                 weight_decay=1e-4)
-    # optimizer = torch.optim.Adam(model.parameters(), initial_lr, weight_decay=1e-2)
     trainer = Trainer(model=model, initial_lr=initial_lr, train_loader=train_loader, validation_loader=val_loader,
                       top_k=(1,), print_interval=print_interval, loss_fn=criterion, optimizer=optimizer,
                       half_float=False, label_transformer=label_transformer,
-                      model_store_path='checkpoints/' + model.__class__.__name__,
+                      model_store_path='/mnt/data/checkpoints/' + model.__class__.__name__,
                       accuracy_fn=multi_label_accuracy_fn, gpu_id=gpu_id, lr_decay_rate=lr_decay_rate)
     trainer.run(epochs=epochs, resume=model_path, valid=True)
 
@@ -129,18 +163,20 @@ def evaluate(model_path, classes, image_path):
 
 
 def main():
+    data_path = "/mnt/data/dataset/mlt"
+    model_path = ''
+    train_ctpn(data_path, model_path, epochs=10, batch_size=1, print_interval=1, gpu_id=0,
+               initial_lr=1e-4, lr_decay_rate=2)
+    """
     classes = 5990
     batch_size = 32
-    data_path = "/mnt/data/BaiduNetdiskDownload"
+    data_path = "/mnt/data/dataset/YCG09"
     model_path = None
-    # model = CRNN(32, 3, classes, 128)
     model = DenseNetCTC(num_classes=classes, conv0=nn.Conv2d(3, 64, 3, 1, 1))
-    # model = DenseBLSTMCTC(num_classes=classes)
-    label_transformer = MultiLabelTransformer(label_file='label.txt', encoding='GB18030')
-    train(model, data_path, label_transformer, batch_size=batch_size, load_worker=8,
-          gpu_id=0, lr_decay_rate=1, model_path=model_path, start_index=0, initial_lr=1e-3,
-          train_length=None, valid_length=None)
-
+    train_recognize(model, data_path, batch_size=batch_size, load_worker=8, gpu_id=0,
+                    lr_decay_rate=1, model_path=model_path, start_index=0, initial_lr=1e-3,
+                    train_length=None, valid_length=None)
+    """
     # test_data(model, model_path, label_transformer, batch_size)
 
     # new_image = evaluate(model, 'checkpoints/ocr-lstm.pth',

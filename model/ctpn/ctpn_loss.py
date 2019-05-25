@@ -1,4 +1,5 @@
 import torch
+import math
 import torch.nn as nn
 
 
@@ -10,9 +11,10 @@ class CTPNLoss(nn.Module):
         self.sideLoss = nn.SmoothL1Loss()
         self.use_cuda = cuda
 
-    def forward(self, score, vertical_pred, side_refinement_pred, positive, negative, vertical_reg,
-                side_refinement_reg):
+    def forward(self, output, target):
         """
+        :param target:
+        :param output:
         :param score: shape=(1, 2k, h, w), 一个是文字得分，一个是非文字得分, 等同于训练一个二分类.
         :param vertical_pred: shape=(1, 2k, h, w) anchor的Y轴坐标和anchor的高度
         :param side_refinement_pred: shape=(1, k, h, w) anchor的X轴偏移量
@@ -29,6 +31,8 @@ class CTPNLoss(nn.Module):
         :return:
 
         """
+        score, vertical_pred, side_refinement_pred = output[:]
+        positive, negative, vertical_reg, side_refinement_reg = target[:]
         cls_loss = 0.
         for sample in positive:
             sample = self.unpack(sample)
@@ -40,7 +44,7 @@ class CTPNLoss(nn.Module):
             target = torch.LongTensor([0])
             pred_score = score[0, sample[2] * 2:sample[2] * 2 + 2, sample[0], sample[1]].unsqueeze(0)
             cls_loss += self.scoreLoss(pred_score, target.cuda() if self.use_cuda else target)
-        cls_loss = cls_loss / (len(positive) + len(negative))
+        cls_loss = 0. if (len(positive) + len(negative)) == 0 else cls_loss / (len(positive) + len(negative))
 
         vertical_loss = 0.
         for sample in vertical_reg:
@@ -48,7 +52,7 @@ class CTPNLoss(nn.Module):
             target = torch.FloatTensor([sample[3:]])
             pred_vertical = vertical_pred[0, sample[2] * 2:sample[2] * 2 + 2, sample[0], sample[1]].unsqueeze(0)
             vertical_loss += self.verticalLoss(pred_vertical, target.cuda() if self.use_cuda else target)
-        vertical_loss = vertical_loss / len(vertical_reg)
+        vertical_loss = 0. if len(vertical_reg) == 0 else vertical_loss / len(vertical_reg)
 
         side_refinement_loss = 0.
         for sample in side_refinement_reg:
@@ -56,10 +60,11 @@ class CTPNLoss(nn.Module):
             target = torch.FloatTensor([sample[3]])
             pred_side_refinement = side_refinement_pred[0, sample[2], sample[0], sample[1]].unsqueeze(0)
             side_refinement_loss += self.sideLoss(pred_side_refinement, target.cuda() if self.use_cuda else target)
-        side_refinement_loss = side_refinement_loss / len(side_refinement_reg)
+        side_refinement_loss = 0. if len(side_refinement_reg) == 0 else side_refinement_loss / len(side_refinement_reg)
 
         total_loss = cls_loss + vertical_loss + side_refinement_loss
-        return total_loss, cls_loss, vertical_loss, side_refinement_loss
+        total_loss = torch.FloatTensor([math.inf]) if total_loss == 0 else total_loss
+        return total_loss
 
     @staticmethod
     def unpack(data):

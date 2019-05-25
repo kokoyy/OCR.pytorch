@@ -83,7 +83,7 @@ class Trainer(object):
                 return
             with open('command.txt', 'r') as order:
                 line = order.readline()
-                if line == 'stop':
+                if line.find('stop') >= 0:
                     trainer.stopped = True
                 else:
                     Timer(10.0, check_stop, args=[trainer], kwargs=None).start()
@@ -96,6 +96,8 @@ class Trainer(object):
                     'Time {batch_time.val:.3f}({batch_time.avg:.3f})\t' \
                     'Data {data_time.val:.3f}({data_time.avg:.3f})\t' \
                     'Loss {loss.val:.4f}({loss.avg:.4f})\t'
+        if self.accuracy_fn is None:
+            return print_str
         for k in self.top_k:
             print_str = print_str + 'Prec@' + str(k) + ' {metric[top' + str(k) + '].val:.2%}({metric[top' + str(
                 k) + '].avg:.2%})\t'
@@ -117,7 +119,7 @@ class Trainer(object):
             'train_loss': self.metric['train_loss'],
             'validation_loss': self.metric['validation_loss'],
         }
-        filename = '{filePrefix}-{epoch}-val_prec_{precTop1:.3f}-loss_{loss:.3f}.pth.tar' \
+        filename = '{filePrefix}-{epoch}-val_prec_{precTop1:.3f}-loss_{loss:.3f}.pth' \
             .format(filePrefix=file_prefix, epoch=epoch,
                     precTop1=state['validation_prec@top1'],
                     loss=state['validation_loss'])
@@ -193,21 +195,22 @@ class Trainer(object):
             # measure data loading time
             data_time.update(time.time() - end)
             samples = samples.to(self.device) if not self.half_float else samples.to(self.device).half()
-            target = target.to(self.device)
+            if isinstance(target, torch.Tensor):
+                target = target.to(self.device)
 
             # compute output and loss
             output = self.model(samples)
             loss = self.criterion(output, target)
             if math.isinf(loss.item()):
-                print('inf loss', target)
                 continue
             losses.update(loss.item(), samples.size(0))
 
             # measure accuracy and record loss
-            precs = self.accuracy_fn(self.label_transformer, self.top_k, output, target)
-            for idx, key in enumerate(prec_topk):
-                prec_topk[key].update(precs[idx].item() if isinstance(precs[idx], torch.Tensor) else precs[idx],
-                                      samples.size(0))
+            if self.accuracy_fn is not None:
+                precs = self.accuracy_fn(self.label_transformer, self.top_k, output, target)
+                for idx, key in enumerate(prec_topk):
+                    prec_topk[key].update(precs[idx].item() if isinstance(precs[idx], torch.Tensor) else precs[idx],
+                                          samples.size(0))
 
             # compute gradient and do SGD step
             if train_model:
@@ -224,7 +227,7 @@ class Trainer(object):
                 left_data = len(loader) - i
                 print(self.print_str.format(
                     epoch, i, len(loader), left_data * batch_time.avg,
-                    batch_time=batch_time, data_time=data_time, loss=losses, metric=prec_topk))
+                    batch_time=batch_time, data_time=data_time, loss=losses, metric=prec_topk), flush=True)
                 if i == 0:
                     batch_time.reset()
                 data_time.reset()

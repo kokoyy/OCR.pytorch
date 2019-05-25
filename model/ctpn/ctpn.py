@@ -1,4 +1,3 @@
-import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -90,15 +89,11 @@ class BLSTM(nn.Module):
         self.lstm = nn.LSTM(channel, hidden_unit, bidirectional=bidirectional)
 
     def forward(self, x):
-        # (bs, D, H, W) transpose -> (bs, W, H, D)
-        x = x.transpose(1, 3)
-        # (bs, W, H, D) transpose -> (bs, H, W, D)
-        x = x.transpose(1, 2)
-        recurrent, _ = self.lstm(x[0])  # (H, W, D) H -> means
-        recurrent = recurrent[np.newaxis, :, :, :]
-        recurrent = recurrent.transpose(1, 3)
-        recurrent = recurrent.transpose(2, 3)
-        return recurrent
+        x = x.permute(0, 2, 3, 1)
+        x, _ = self.lstm(x[0])
+        x = x.unsqueeze(0)
+        x = x.permute(0, 3, 1, 2)
+        return x
 
 
 # 作用不是很清楚 (N, C, H, W) -> (N, C*pad^2, H, W)
@@ -123,24 +118,24 @@ class CTPN(nn.Module):
         self.features = nn.Sequential()
         vgg = VGG_16()
         vgg_state = {}
-        for name, value in vgg_model.items():
+        for name, value in vgg_model:
             if name not in VGG_FEATURES_MAPPING:
                 continue
             vgg_state[VGG_FEATURES_MAPPING[name]] = value
         vgg.state_dict().update(vgg_state)
-        self.features.add_module('VGG_16', vgg)
-        #  self.features.add_module('conv2lstm', conv2lstm((3, 3), (1, 1), (1, 1)))
-        self.features.add_module('blstm', BLSTM(512, 128))
-        self.features.add_module('fc', nn.Conv2d(256, 512, 1))
+        self.cnn = vgg
+        self.rnn = BLSTM(512, 128)
+        self.fc = nn.Conv2d(256, 512, 1)
 
         self.vertical_coordinate = nn.Conv2d(512, 2 * 10, 1)  # 最终输出2K个参数（k=10），10表示anchor的尺寸个数，2个参数分别表示anchor的h和dy
         self.score = nn.Conv2d(512, 2 * 10, 1)  # 最终输出是2K个分数（k=10），2表示有无字符，10表示anchor的尺寸个数
         self.side_refinement = nn.Conv2d(512, 10, 1)  # 最终输出1K个参数（k=10），该参数表示该anchor的水平偏移，用于精修文本框水平边缘精度，，10表示anchor的尺寸个数
 
     def forward(self, x, val=False):
-        x = self.features(x)
+        x = self.cnn(x)
+        x = self.rnn(x)
+        x = self.fc(x)
         x = F.relu(x, inplace=True)
-
         vertical_pred = self.vertical_coordinate(x)
         score = self.score(x)
         side_refinement = self.side_refinement(x)
@@ -150,9 +145,20 @@ class CTPN(nn.Module):
             score = score.squeeze(0)
             score = score.transpose(1, 2)
             score = score.transpose(2, 3)
-            score = score.reshape((-1, 2))
             score = score.reshape((10, vertical_pred.shape[2], -1, 2))
             vertical_pred = vertical_pred.reshape(
                 (vertical_pred.shape[0], 10, 2, vertical_pred.shape[2], vertical_pred.shape[3]))
 
         return score, vertical_pred, side_refinement
+
+
+if __name__ == '__main__':
+    import torch
+    import cv2
+    import torchvision.models as models
+    import torchvision.transforms as transfroms
+    transform = transfroms.ToTensor()
+    model = CTPN(models.vgg16_bn(True).named_parameters())
+    pic = cv2.imread('/home/yuanyi/Pictures/test.png', cv2.IMREAD_COLOR)
+    for name, val in model.named_parameters():
+        print(name)
