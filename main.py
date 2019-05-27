@@ -1,9 +1,9 @@
 import cv2
-import os
 import numpy as np
 import torch
 import torch.backends.cudnn
 import torch.nn as nn
+import torch.optim
 import torch.utils.data
 import torchvision.transforms as transforms
 from PIL import Image, ImageDraw, ImageFont
@@ -77,7 +77,7 @@ def train_recognize(model, data_path, model_path=None, initial_lr=0.01, epochs=1
         num_workers=load_worker, pin_memory=True
     )
 
-    criterion = CTCLoss(zero_infinity=True)
+    criterion = CTCLoss(use_baidu=True)
     optimizer = torch.optim.SGD(model.parameters(), initial_lr,
                                 momentum=0.9,
                                 weight_decay=1e-4)
@@ -163,13 +163,15 @@ def evaluate(model_path, classes, image_path):
 
 
 def main():
+    """
     data_path = "/mnt/data/dataset/mlt"
     model_path = ''
     train_ctpn(data_path, model_path, epochs=10, batch_size=1, print_interval=1, gpu_id=0,
                initial_lr=1e-4, lr_decay_rate=2)
+
     """
     classes = 5990
-    batch_size = 32
+    batch_size = 16
     data_path = "/mnt/data/dataset/YCG09"
     model_path = None
     model = DenseNetCTC(num_classes=classes, conv0=nn.Conv2d(3, 64, 3, 1, 1))
@@ -182,6 +184,7 @@ def main():
     # new_image = evaluate(model, 'checkpoints/ocr-lstm.pth',
     #                     '/home/yuanyi/Pictures/tijian.png', label_transformer)
     # cv2.imwrite('new_image.png', new_image)
+    """
 
 
 if __name__ == '__main__':
