@@ -26,9 +26,71 @@ def parse(image, origin_anchors):
     side_refinement_reg = []
 
     (height, width) = (np.array(image.shape[:2]) / 16)  # assert input.shape[:2] % 16 == [0, 0]
-    prepared_anchors = []
+    prepared_anchors = get_all_prepared_anchors(height, width)
+    ground_truth_anchors = get_all_gt_anchors(origin_anchors)
+    pred_gt_iou = {}
+    for key in prepared_anchors:
+        prepared_anchors_pre_space = prepared_anchors[key]
+        for k, prepared_anchor in enumerate(prepared_anchors_pre_space):
+            iou_key = key + '-' + str(k)
+            if iou_key not in pred_gt_iou:
+                pred_gt_iou[iou_key] = []
+            for gt_key in ground_truth_anchors:
+                gt_anchor = ground_truth_anchors[gt_key]
+                iou = _cal_iou(prepared_anchor, gt_anchor[0], gt_anchor[1], gt_anchor[2])
+                pred_gt_iou[iou_key].append(iou)
+
+    for iou_key in pred_gt_iou:
+        ious = pred_gt_iou[iou_key]
+        indices = iou_key.split('-')
+        prepared_anchor = prepared_anchors[indices[0] + "-" + indices[1]][int(indices[2])]
+
+        ground_truth_anchor_array = [ground_truth_anchors[gt_key] for gt_key in ground_truth_anchors]
+        max_iou = max(ious)
+        if max_iou < 0.4:
+            negative.append(prepared_anchor)
+        elif max_iou > 0.7:
+            positive.append(prepared_anchor)
+        else:
+            for gt_index, iou in enumerate(ious):
+                if iou < 0.5:
+                    continue
+                gt_anchor = ground_truth_anchors[gt_index]
+                is_side, is_left = _is_side_anchor(gt_index, gt_anchor, ground_truth_anchor_array)
+                yaxis = prepared_anchor[3]
+                prepared_anchor_height = ANCHOR_HEIGHTS[prepared_anchor[2]]
+                # see paper https://arxiv.org/pdf/1609.03605.pdf
+                vc = (yaxis - gt_anchor[0][1]) / prepared_anchor_height
+                vh = math.log10(gt_anchor[1] / prepared_anchor_height)
+                vertical_reg.append((prepared_anchor[0], prepared_anchor[1], prepared_anchor[2], vc, vh))
+                if is_side:
+                    x_axis = gt_anchor[3][0 if is_left else 2]
+                    side_refinement_reg.append((prepared_anchor[0], prepared_anchor[1], prepared_anchor[2],
+                                                (x_axis - prepared_anchor[1] * (16 if is_left else 17)) / 16))
+
+    positive = random.sample(positive, min(NUM_OF_SAMPLE, len(positive)))
+    negative = random.sample(negative, min(NUM_OF_SAMPLE, len(negative)))
+    return positive, negative, vertical_reg, side_refinement_reg
+
+
+def get_all_gt_anchors(origin_anchors):
+    ground_truth_anchors = {}
+    for num, anchor in enumerate(origin_anchors):
+        points = [int(point) for point in anchor.strip().split(',')]
+        anchor_center = ((points[0] + points[2]) / 2, (points[1] + points[3]) / 2)
+        anchor_height = points[3] - points[1]
+        anchor_width = points[2] - points[0]
+        ground_truth_anchors[num] = (anchor_center, anchor_height, anchor_width, points)
+    return ground_truth_anchors
+
+
+def get_all_prepared_anchors(height, width):
+    prepared_anchors = {}
     for i in range(0, int(width)):
         for j in range(0, int(height)):
+            key = "{j}-{i}".format(j=j, i=i)
+            if key not in prepared_anchors:
+                prepared_anchors[key] = []
             for k in range(0, len(ANCHOR_HEIGHTS)):
                 center = (j * 16 + (j + 1) * 16) / 2
                 prepared_anchor_height = ANCHOR_HEIGHTS[k]
@@ -37,47 +99,8 @@ def parse(image, origin_anchors):
                 if prepared_anchor_top < 0 or prepared_anchor_bottom > height * 16:
                     # not a valid anchor, skip
                     continue
-                prepared_anchors.append((j, i, k, center))
-
-    ground_truth_anchors = []
-    for anchor in origin_anchors:
-        points = [int(point) for point in anchor.strip().split(',')]
-        anchor_center = ((points[0] + points[2]) / 2, (points[1] + points[3]) / 2)
-        anchor_height = points[3] - points[1]
-        anchor_width = points[2] - points[0]
-        ground_truth_anchors.append((anchor_center, anchor_height, anchor_width, points))
-
-    for anchor_index in range(0, len(ground_truth_anchors)):
-        ground_truth_anchor = ground_truth_anchors[anchor_index]
-        #  该anchor是否处于Bbox的边缘
-        is_side, is_left = _is_side_anchor(anchor_index, ground_truth_anchor, ground_truth_anchors)
-
-        for prepared_anchor in prepared_anchors:
-            #                               anchor_center               anchor_height
-            iou = _cal_iou(prepared_anchor, ground_truth_anchor[0], ground_truth_anchor[1], ground_truth_anchor[2])
-            if iou > 0.7:
-                positive.append(prepared_anchor)
-            if iou <= 0.4:
-                negative.append(prepared_anchor)
-
-            if iou > 0.5:
-                yaxis = prepared_anchor[3]
-                prepared_anchor_height = ANCHOR_HEIGHTS[prepared_anchor[2]]
-                # see paper https://arxiv.org/pdf/1609.03605.pdf
-                vc = (yaxis - ground_truth_anchor[0][1]) / prepared_anchor_height
-                vh = math.log10(ground_truth_anchor[1] / prepared_anchor_height)
-                vertical_reg.append((prepared_anchor[0], prepared_anchor[1], prepared_anchor[2], vc, vh))
-
-                if is_side:
-                    # side_refinement_reg is positive number if is left_side else negative number
-                    # side_refinement_reg度量的就是gt_side和proposal_side的距离
-                    x_axis = ground_truth_anchor[3][0 if is_left else 2]
-                    side_refinement_reg.append((prepared_anchor[0], prepared_anchor[1], prepared_anchor[2],
-                                                (x_axis - prepared_anchor[1] * (16 if is_left else 17)) / 16))
-
-    positive = random.sample(positive, min(NUM_OF_SAMPLE, len(positive)))
-    negative = random.sample(negative, min(NUM_OF_SAMPLE, len(negative)))
-    return positive, negative, vertical_reg, side_refinement_reg
+                prepared_anchors[key].append((j, i, k, center))
+    return prepared_anchors
 
 
 def _cal_iou(prepared_anchor, gt_center, gt_height, gt_width):

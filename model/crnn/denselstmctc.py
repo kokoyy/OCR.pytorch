@@ -8,21 +8,27 @@ class DenseBLSTMCTC(nn.Module):
         super(DenseBLSTMCTC, self).__init__()
         self.cnn = nn.Sequential(
             nn.Conv2d(3, 64, 3, 1, 1),
+            nn.LeakyReLU(inplace=True),
             nn.MaxPool2d(kernel_size=(2, 2), stride=2),
             nn.Conv2d(64, 128, 3, 1, 1),
+            nn.LeakyReLU(inplace=True),
             nn.MaxPool2d(kernel_size=(2, 2), stride=2),
             nn.Conv2d(128, 256, 3, 1, 1),
+            nn.LeakyReLU(inplace=True),
             nn.Conv2d(256, 256, 3, 1, 1),
+            nn.LeakyReLU(inplace=True),
             nn.MaxPool2d(kernel_size=(1, 2), stride=2),
             nn.Conv2d(256, 512, 3, 1, 1),
+            nn.LeakyReLU(inplace=True),
             nn.BatchNorm2d(512),
             nn.Conv2d(512, 512, 3, 1, 1),
+            nn.LeakyReLU(inplace=True),
             nn.BatchNorm2d(512),
-            nn.MaxPool2d(kernel_size=(1, 2), stride=2),
-            nn.Conv2d(512, 512, 2, 1, 0)
+            nn.Conv2d(512, 512, 3, 1, 1),
+            nn.LeakyReLU(inplace=True),
         )
 
-        self.lstm1 = nn.LSTM(512, 256, bidirectional=True)
+        self.lstm1 = nn.LSTM(512 * 4, 256, bidirectional=True)
         self.linear1 = nn.Linear(512, 512)
         self.lstm2 = nn.LSTM(512, 256, bidirectional=True)
         self.linear2 = nn.Linear(512, num_classes)
