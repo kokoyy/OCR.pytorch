@@ -191,7 +191,6 @@ class Trainer(object):
 
     def _compute(self, batch_time, data_time, end, epoch, loader, losses, prec_topk, train_model):
         for i, (samples, target) in enumerate(loader):
-            torch.cuda.empty_cache()
             # measure data loading time
             data_time.update(time.time() - end)
             samples = samples.to(self.device) if not self.half_float else samples.to(self.device).half()

@@ -19,11 +19,11 @@ class DenseBLSTMCTC(nn.Module):
             nn.LeakyReLU(inplace=True),
             nn.MaxPool2d(kernel_size=(1, 2), stride=2),
             nn.Conv2d(256, 512, 3, 1, 1),
-            nn.LeakyReLU(inplace=True),
             nn.BatchNorm2d(512),
+            nn.LeakyReLU(inplace=True),
             nn.Conv2d(512, 512, 3, 1, 1),
-            nn.LeakyReLU(inplace=True),
             nn.BatchNorm2d(512),
+            nn.LeakyReLU(inplace=True),
             nn.Conv2d(512, 512, 3, 1, 1),
             nn.LeakyReLU(inplace=True),
         )
@@ -49,14 +49,8 @@ class DenseBLSTMCTC(nn.Module):
         x = x.contiguous().view(x.shape[0], x.shape[1], -1)
 
         x, _ = self.lstm1(x)
-        t, b, h = x.size()
-        x = x.view(t * b, h)
         x = self.linear1(x)
-        x = x.view(t, b, -1)
 
         x, _ = self.lstm2(x)
-        t, b, h = x.size()
-        x = x.view(t * b, h)
         x = self.linear2(x)
-        x = x.view(t, b, -1)
         return fn.log_softmax(x, dim=2)
