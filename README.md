@@ -1,10 +1,10 @@
 chinese, english, digit OCR using dnn
-[install warp-ctc]
+#### [install warp-ctc]
 git clone --recursive https://github.com/jpuigcerver/pytorch-baidu-ctc.git
 cd pytorch-baidu-ctc
 
-# after line 72, add a new line
-# extra_compile_args["cxx"].append("-g0")
+after line 72, add a new line
+extra_compile_args["cxx"].append("-g0")
 
 python setup.py build
 python setup.py install
