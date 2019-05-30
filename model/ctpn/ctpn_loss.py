@@ -1,5 +1,6 @@
-import torch
 import math
+
+import torch
 import torch.nn as nn
 
 
@@ -64,6 +65,8 @@ class CTPNLoss(nn.Module):
 
         total_loss = cls_loss + vertical_loss + side_refinement_loss
         total_loss = torch.FloatTensor([math.inf]) if total_loss == 0 else total_loss
+        print('total_loss', total_loss, 'cls_loss:', cls_loss, 'vertical_loss:',
+              vertical_loss, 'side_refinement_loss:', side_refinement_loss)
         return total_loss
 
     @staticmethod

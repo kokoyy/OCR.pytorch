@@ -18,6 +18,10 @@ class CTPNDataset(data.Dataset):
                 label_file = os.path.join(self.label_file_path, filename.split('.')[0] + ".txt")
                 if not os.path.exists(label_file):
                     continue
+                with open(label_file, 'r') as anchor_text:
+                    anchors = anchor_text.readlines()
+                    if len(anchors) == 0:
+                        continue
                 self.all_sample.append(filename)
 
     def reset_index(self, use_start_index):
