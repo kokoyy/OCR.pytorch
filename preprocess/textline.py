@@ -31,7 +31,7 @@ def _preprocess(gray):
     element2 = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 10))
     dilation = cv2.dilate(binary, element2, iterations=1)
     erosion = cv2.erode(dilation, element1, iterations=1)
-    element3 = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 5))
+    element3 = cv2.getStructuringElement(cv2.MORPH_RECT, (17, 12))
     dilation2 = cv2.dilate(erosion, element3, iterations=1)
     return dilation2
 
@@ -70,10 +70,9 @@ def _find_text_region_projection(image):
 
 
 def _find_text_region_close(image):
+    image = _preprocess(image)
     region = []
-    binary, contours, hierarchy = cv2.findContours(image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    cv2.drawContours(image, contours, -1, (0, 0, 255), 3)
-    cv2.imwrite("split.png", image)
+    binary, contours, hierarchy = cv2.findContours(image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     for i in range(len(contours)):
         cnt = contours[i]
         area = cv2.contourArea(cnt)
@@ -96,6 +95,6 @@ def _find_text_region_close(image):
 
 
 def cv2_detect_text_region(image):
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, img = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY_INV)
-    return _find_text_region_projection(img)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    _, image = cv2.threshold(image, 127, 255, cv2.THRESH_BINARY_INV)
+    return _find_text_region_projection(image)

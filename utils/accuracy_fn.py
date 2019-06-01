@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 
 def multi_label_accuracy_fn(label_transformer, top_k, preds, targets):
@@ -26,15 +27,16 @@ def multi_label_accuracy_fn(label_transformer, top_k, preds, targets):
 
 def default_accuracy_fn(label_transformer, top_k, output, target):
     """Computes the precision@k for the specified values of k"""
+    target = torch.cat((target.cpu(), torch.ones((target.shape[0], 1)).long()), dim=1)
+    target = target.t().contiguous().view(-1, 1)
     output = label_transformer.parse_prediction(output, top_k=max(top_k), to_string=False)
     maxk = max(top_k)
     batch_size = target.size(0)
     _, pred = output.topk(maxk, 1, True, True)
-    pred = pred.t()
+    pred = pred.t().cpu()
     correct = pred.eq(target.view(1, -1).expand_as(pred))
-
     res = []
     for k in top_k:
         correct_k = correct[:k].view(-1).float().sum(0)
-        res.append(correct_k.mul_(100.0 / batch_size))
+        res.append(correct_k.mul_(1 / batch_size))
     return res

@@ -25,9 +25,9 @@ class YCG09DataSet(data.Dataset):
                 labels = label_line.strip().split(split_char)
                 filename = labels[0]
                 if split_char == ' ':
-                    labels = [int(label.strip()) for label in labels[1:]]
+                    labels = [int(label.strip()) + 2 for label in labels[1:]]
                 elif split_char == '\t':
-                    labels = [int(label.strip()) for label in labels[1].split(' ')]
+                    labels = [int(label.strip()) + 2 for label in labels[1].split(' ')]
                 else:
                     raise KeyError('unknown split_char')
                 self.all_sample.append((filename, tuple(labels)))
@@ -53,7 +53,7 @@ class YCG09DataSet(data.Dataset):
         image = cv2.imread(os.path.join(self.img_file_path, sample[0]), cv2.IMREAD_COLOR)
         if self.transform is not None:
             image = self.transform(image)
-        target = torch.IntTensor(sample[1])
+        target = torch.LongTensor(sample[1])
         if self.label_transform is not None:
             target = self.label_transform(target)
         return image, target

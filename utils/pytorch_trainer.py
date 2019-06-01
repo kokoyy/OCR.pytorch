@@ -198,7 +198,7 @@ class Trainer(object):
                 target = target.to(self.device)
 
             # compute output and loss
-            output = self.model(samples)
+            output = self.model(samples, target=target)
             loss = self.criterion(output, target)
             if math.isinf(loss.item()):
                 continue
