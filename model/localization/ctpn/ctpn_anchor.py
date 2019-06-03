@@ -89,10 +89,10 @@ def get_all_prepared_anchors(height, width):
     for i in range(0, int(width)):
         for j in range(0, int(height)):
             key = "{j}-{i}".format(j=j, i=i)
+            center = (j * 16 + (j + 1) * 16) / 2
             if key not in prepared_anchors:
                 prepared_anchors[key] = []
             for k in range(0, len(ANCHOR_HEIGHTS)):
-                center = (j * 16 + (j + 1) * 16) / 2
                 prepared_anchor_height = ANCHOR_HEIGHTS[k]
                 prepared_anchor_top = center - prepared_anchor_height / 2
                 prepared_anchor_bottom = center + prepared_anchor_height / 2

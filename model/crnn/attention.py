@@ -37,17 +37,19 @@ class AttentionDecoder(nn.Module):
         self.embedding = nn.Embedding(classes, hidden_size)
         self.attention_linear = nn.Linear(hidden_size, hidden_size)
         self.attention_weights_linear = nn.Linear(hidden_size, 1)
-        self.gru = nn.GRUCell(hidden_size, hidden_size)
+        self.gru = nn.GRU(hidden_size, hidden_size)
+        self.atten_combine = nn.Linear(hidden_size, hidden_size)
         self.fc = nn.Linear(hidden_size, classes)
 
     def forward(self, encoder_output: torch.Tensor, hidden, last_predict):
-        atte_x = self.attention_linear(hidden)
+        atte_x = self.attention_linear(hidden[0])
         attention_weights = torch.tanh((atte_x + self.embedding(last_predict)))
         attention_weights = attention_weights.unsqueeze(1) + encoder_output
         attention_weights = func.softmax(self.attention_weights_linear(attention_weights), dim=1).squeeze(2)
         x = torch.matmul(attention_weights.unsqueeze(1), encoder_output)
-        x = self.gru(x.squeeze(1), hidden)
-        x = func.log_softmax(self.fc(x), dim=1)
+        x = func.leaky_relu(self.atten_combine(x), inplace=True)
+        x, hidden = self.gru(x.permute(1, 0, 2), hidden)
+        x = func.log_softmax(self.fc(x.squeeze(0)), dim=1)
         return x, hidden, attention_weights
 
 
@@ -66,7 +68,7 @@ class Attention(nn.Module):
         target = torch.cat((target, addition), dim=1)
 
         encoder_output = self.encoder(x).permute(1, 0, 2)
-        hidden = torch.zeros(encoder_output.shape[0], self.hidden_size).to(self.device)
+        hidden = torch.zeros(1, encoder_output.shape[0], self.hidden_size).to(self.device)
         output_all = None
         for idx in range(target.shape[1]):
             output, hidden, _ = self.decoder(encoder_output, hidden, target[:, idx])
@@ -84,9 +86,3 @@ class Attention(nn.Module):
             raise KeyError('args #0 must be device')
         return super(Attention, self).to(*args, **kwargs)
 
-
-if __name__ == '__main__':
-    model = Attention(256, 5990 + 3, 12)
-    x = torch.randn(8, 3, 32, 224)
-    output = model(x)
-    print(output)

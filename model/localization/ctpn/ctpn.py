@@ -89,10 +89,10 @@ class BLSTM(nn.Module):
         self.lstm = nn.LSTM(channel, hidden_unit, bidirectional=bidirectional)
 
     def forward(self, x):
-        x = x.permute(0, 2, 3, 1)
+        x = x.permute(0, 3, 2, 1)
         x, _ = self.lstm(x[0])
         x = x.unsqueeze(0)
-        x = x.permute(0, 3, 1, 2)
+        x = x.permute(0, 3, 2, 1)
         return x
 
 
@@ -153,7 +153,6 @@ class CTPN(nn.Module):
 
 
 if __name__ == '__main__':
-    import torch
     import cv2
     import torchvision.models as models
     import torchvision.transforms as transfroms

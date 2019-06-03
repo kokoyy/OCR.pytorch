@@ -3,7 +3,7 @@ import os
 import cv2
 import torch.utils.data as data
 
-import model.ctpn.ctpn_anchor as anchor_util
+import model.localization.ctpn.ctpn_anchor as anchor_util
 
 
 class CTPNDataset(data.Dataset):

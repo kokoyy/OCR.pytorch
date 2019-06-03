@@ -8,7 +8,7 @@ from dataset.YCG09dataset import YCG09DataSet
 from dataset.ctpnDataset import CTPNDataset
 from model.crnn.dense_full_conv import DenseNetCTC
 from model.ctc import CTCLoss
-from model.ctpn.ctpn_loss import CTPNLoss
+from model.localization.ctpn.ctpn_loss import CTPNLoss
 from utils.accuracy_fn import multi_label_accuracy_fn
 from utils.label import MultiLabelTransformer
 from utils.pytorch_trainer import Trainer
@@ -17,7 +17,7 @@ from utils.pytorch_trainer import Trainer
 def train_ctpn(data_path, model_path=None, initial_lr=0.01, epochs=10, batch_size=32,
                load_worker=4, print_interval=10, gpu_id=-1, lr_decay_rate=2):
     import torchvision.models as models
-    from model.ctpn.ctpn import CTPN
+    from model.localization.ctpn.ctpn import CTPN
 
     transform = transforms.Compose([
         transforms.ToTensor(),
@@ -141,22 +141,21 @@ def main():
 def train_attention():
     classes = 5992
     epochs = 3
-    initial_lr = 1e-1
+    initial_lr = 1
     print_interval = 10
     lr_decay_rate = 1
     gpu_id = 0
     batch_size = 32
     load_worker = 8
     data_path = "/mnt/data/dataset/YCG09"
-    # model_path = '/mnt/data/checkpoints/Attention/checkpoint-0-val_prec_0.000-loss_0.000.pth'
-    # start_index = 11090+6270+5050
-    # model_path = '/mnt/data/checkpoints/Attention/checkpoint-2-val_prec_0.000-loss_0.000.pth'
-    model_path = ''
-    start_index = 0
+    model_path = '/mnt/data/checkpoints/Attention/checkpoint-0-val_prec_0.539-loss_2.428.pth'
+    start_index = 41200 + 750
     train_length, valid_length = None, None
 
     from model.crnn.attention import Attention
     from model.crnn.attention_loss import AttentionLoss
+    # 11  -> training label max_length
+    # 256 -> hidden size， also embedding_size
     model = Attention(256, classes, 11)
     criterion = AttentionLoss()
 
