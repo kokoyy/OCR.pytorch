@@ -141,7 +141,7 @@ def main():
 def train_attention():
     classes = 5992
     epochs = 3
-    initial_lr = 1
+    initial_lr = 0.1
     print_interval = 10
     lr_decay_rate = 1
     gpu_id = 0

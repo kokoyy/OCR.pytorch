@@ -10,7 +10,7 @@ class CTPNLoss(nn.Module):
         self.scoreLoss = nn.CrossEntropyLoss()
         self.verticalLoss = nn.SmoothL1Loss()
         self.sideLoss = nn.SmoothL1Loss()
-        self.use_cuda = cuda
+        self.device = torch.device("cpu")
 
     def forward(self, output, target):
         """
@@ -39,12 +39,12 @@ class CTPNLoss(nn.Module):
             sample = self.unpack(sample)
             target = torch.LongTensor([1])
             pred_score = score[0, sample[2] * 2:sample[2] * 2 + 2, sample[0], sample[1]].unsqueeze(0)
-            cls_loss += self.scoreLoss(pred_score, target.cuda() if self.use_cuda else target)
+            cls_loss += self.scoreLoss(pred_score, target.to(self.device))
         for sample in negative:
             sample = self.unpack(sample)
             target = torch.LongTensor([0])
             pred_score = score[0, sample[2] * 2:sample[2] * 2 + 2, sample[0], sample[1]].unsqueeze(0)
-            cls_loss += self.scoreLoss(pred_score, target.cuda() if self.use_cuda else target)
+            cls_loss += self.scoreLoss(pred_score, target.to(self.device))
         cls_loss = 0. if (len(positive) + len(negative)) == 0 else cls_loss / (len(positive) + len(negative))
 
         vertical_loss = 0.
@@ -52,7 +52,7 @@ class CTPNLoss(nn.Module):
             sample = self.unpack(sample)
             target = torch.FloatTensor([sample[3:]])
             pred_vertical = vertical_pred[0, sample[2] * 2:sample[2] * 2 + 2, sample[0], sample[1]].unsqueeze(0)
-            vertical_loss += self.verticalLoss(pred_vertical, target.cuda() if self.use_cuda else target)
+            vertical_loss += self.verticalLoss(pred_vertical, target.to(self.device))
         vertical_loss = 0. if len(vertical_reg) == 0 else vertical_loss / len(vertical_reg)
 
         side_refinement_loss = 0.
@@ -60,7 +60,7 @@ class CTPNLoss(nn.Module):
             sample = self.unpack(sample)
             target = torch.FloatTensor([sample[3]])
             pred_side_refinement = side_refinement_pred[0, sample[2], sample[0], sample[1]].unsqueeze(0)
-            side_refinement_loss += self.sideLoss(pred_side_refinement, target.cuda() if self.use_cuda else target)
+            side_refinement_loss += self.sideLoss(pred_side_refinement, target.to(self.device))
         side_refinement_loss = 0. if len(side_refinement_reg) == 0 else side_refinement_loss / len(side_refinement_reg)
 
         total_loss = cls_loss + vertical_loss + side_refinement_loss
@@ -68,6 +68,12 @@ class CTPNLoss(nn.Module):
         print('total_loss', total_loss, 'cls_loss:', cls_loss, 'vertical_loss:',
               vertical_loss, 'side_refinement_loss:', side_refinement_loss)
         return total_loss
+
+    def to(self, *args, **kwargs):
+        self.device = args[0]
+        if not isinstance(self.device, torch.device):
+            raise KeyError('args #0 must be device')
+        return super(CTPNLoss, self).to(*args, **kwargs)
 
     @staticmethod
     def unpack(data):

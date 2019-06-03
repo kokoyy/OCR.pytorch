@@ -6,7 +6,7 @@ class AttentionLoss(nn.Module):
     def __init__(self):
         super(AttentionLoss, self).__init__()
         self.internal_loss = nn.NLLLoss()
-        self.device = None
+        self.device = torch.device("cpu")
 
     def forward(self, pred, target):
         addition = torch.ones((target.shape[0], 1)).long().to(self.device)
