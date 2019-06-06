@@ -39,7 +39,6 @@ def evaluate(model, model_path, image_path):
     checkpoint = torch.load(model_path)
     model.load_state_dict(checkpoint['state_dict'])
     img = cv2.imread(image_path, cv2.IMREAD_COLOR)
-
     img = cv2.resize(img, (int(img.shape[1] * 32 / img.shape[0]), 32), cv2.INTER_AREA)
     transform = transforms.Compose([
         transforms.ToTensor(),
@@ -49,9 +48,12 @@ def evaluate(model, model_path, image_path):
 
     sample = transform(img)
     output = model(sample.unsqueeze(0))
-    for idx, row in enumerate(label_transformer.parse_prediction(output, to_string=True)):
-        pred = ''.join(list(filter(lambda x: x != 0, row[0])))
-        print(pred)
+    output = [output]
+    print(label_transformer.parse_target(output))
+
+    target = '89 201 241 178 19 94 19 22 26 656'
+    target = [int(item) + 2 for item in target.split(' ')]
+    print(label_transformer.parse_target([target]))
 
 
 def main():
@@ -59,9 +61,12 @@ def main():
     # model = DenseNetLinear(num_classes=classes,
     #                       conv0=nn.Conv2d(3, 64, 3, 1, 1), avg_pool=True)
     from model.crnn.dense_full_conv import DenseNetCTC
-    model = DenseNetCTC(num_classes=classes)
-    evaluate(model, '/mnt/data/checkpoints/DenseNetCTC/checkpoint-1-val_prec_0.983-loss_0.108.pth',
-             '/home/yuanyi/Pictures/pic51.png')
+    model = DenseNetCTC(classes)
+    image = '/home/yuanyi/Pictures/tijian-photo2.jpg'
+
+    # model = DenseNetCTC(num_classes=classes)
+    evaluate_full(model, '/mnt/data/checkpoints/DenseNetCTC/checkpoint-2-val_prec_0.977-loss_0.011.pth',
+                  image)
 
 
 if __name__ == '__main__':
